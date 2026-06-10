@@ -1,0 +1,168 @@
+erDiagram
+
+    %% =====================
+    %% AUTHULA-MANAGED (reference only)
+    %% Schema owned by Authula library.
+    %% StellarVote REFERENCES these tables via user_id / org_id FKs.
+    %% =====================
+
+    AUTHULA_USERS {
+        string id PK
+        string email
+        string password_hash
+        boolean email_verified
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    AUTHULA_ACCOUNTS {
+        string id PK
+        string user_id FK
+        string provider
+        string provider_user_id
+        timestamptz created_at
+    }
+
+    AUTHULA_ORGANIZATIONS {
+        string id PK
+        string owner_id FK
+        string name
+        string slug
+        string logo
+        jsonb metadata
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    AUTHULA_ORGANIZATION_MEMBERS {
+        string id PK
+        string organization_id FK
+        string user_id FK
+        string role
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    AUTHULA_ACCESS_CONTROL_ROLES {
+        string id PK
+        string name
+        int weight
+        boolean is_system
+        timestamptz created_at
+    }
+
+    AUTHULA_ACCESS_CONTROL_USER_ROLES {
+        string user_id PK
+        string role_id PK
+    }
+
+    %% =====================
+    %% STELLARVOTE DOMAIN
+    %% =====================
+
+    API_KEYS {
+        uuid id PK
+        uuid org_id FK
+        text name
+        text key_prefix
+        text key_hash
+        timestamptz created_at
+        timestamptz expires_at
+        timestamptz last_used_at
+    }
+
+    ELECTIONS {
+        uuid id PK
+        uuid org_id FK
+        text title
+        text description
+        voting_type voting_type
+        timestamptz start_time
+        timestamptz end_time
+        boolean is_active
+        text soroban_contract_id
+        timestamptz created_at
+    }
+
+    CANDIDATES {
+        uuid id PK
+        uuid election_id FK
+        text label
+        text description
+        jsonb metadata
+        timestamptz created_at
+    }
+
+    ELECTION_WHITELIST {
+        uuid id PK
+        uuid election_id FK
+        text wallet_address
+        timestamptz created_at
+    }
+
+    TOKEN_SNAPSHOTS {
+        uuid id PK
+        uuid election_id FK
+        text wallet_address
+        numeric balance
+        timestamptz captured_at
+    }
+
+    VOTES {
+        uuid id PK
+        uuid election_id FK
+        uuid candidate_id FK
+        text voter_address
+        numeric weight
+        text tx_hash
+        timestamptz created_at
+    }
+
+    ELECTION_VOTE_GUARD {
+        uuid id PK
+        uuid election_id FK
+        text voter_address
+        timestamptz created_at
+    }
+
+    ELECTION_RESULTS {
+        uuid id PK
+        uuid election_id FK
+        uuid candidate_id FK
+        bigint vote_count
+        numeric vote_weight
+        timestamptz updated_at
+    }
+
+    AUDIT_LOGS {
+        uuid id PK
+        uuid election_id FK
+        text actor
+        text action
+        jsonb payload
+        timestamptz created_at
+    }
+
+    %% =====================
+    %% RELATIONSHIPS
+    %% =====================
+
+    %% Authula-owned
+    AUTHULA_USERS ||--o{ AUTHULA_ACCOUNTS : linked
+    AUTHULA_USERS ||--o{ AUTHULA_ORGANIZATION_MEMBERS : member_of
+    AUTHULA_ORGANIZATIONS ||--o{ AUTHULA_ORGANIZATION_MEMBERS : has
+
+    %% StellarVote-owned
+    AUTHULA_ORGANIZATIONS ||--o{ API_KEYS : issued_for
+    AUTHULA_ORGANIZATIONS ||--o{ ELECTIONS : owns
+
+    ELECTIONS ||--o{ CANDIDATES : contains
+    ELECTIONS ||--o{ VOTES : receives
+    ELECTIONS ||--o{ ELECTION_WHITELIST : restricts
+    ELECTIONS ||--o{ TOKEN_SNAPSHOTS : snapshots
+    ELECTIONS ||--o{ ELECTION_RESULTS : aggregates
+    ELECTIONS ||--o{ AUDIT_LOGS : logs
+    ELECTIONS ||--o{ ELECTION_VOTE_GUARD : protects
+
+    CANDIDATES ||--o{ VOTES : selected_in
+    CANDIDATES ||--o{ ELECTION_RESULTS : summarized_as
