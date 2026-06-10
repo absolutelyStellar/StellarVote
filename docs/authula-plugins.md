@@ -359,7 +359,7 @@ ratelimitplugin.New(ratelimitplugin.RateLimitPluginConfig{
 
 ## 10. Secondary Storage Plugin (Optional)
 
-Enables Redis-backed key-value storage for JWT token blacklisting (so sign-out immediately invalidates tokens). Only needed if immediate token revocation is required.
+Enables Redis-backed key-value storage for session blacklisting (sign-out immediately invalidates sessions). Only needed if immediate session revocation is required outside the session plugin's built-in cleanup.
 
 ```go
 // Config via redis URL env var, enabled in secondary-storage plugin config
@@ -369,44 +369,36 @@ Enables Redis-backed key-value storage for JWT token blacklisting (so sign-out i
 
 ## Route Mapping Config
 
-All plugins are wired together via route mappings in the Authula config:
+Authula's route mappings only cover routes that live under its own handler (`/auth`). StellarVote's own routes (elections, API keys, etc.) stay on the `httprouter` and validate sessions via direct cookie reading in custom middleware.
 
 ```go
 authulaconfig.WithRouteMappings([]authulamodels.RouteMapping{
-    // Dashboard: email/password sign-in returns JWT
-    {
-        Method: "POST",
-        Path:   "/auth/email-password/sign-in",
-        Plugins: []string{
-            bearerplugin.HookIDBearerAuthOptional.String(),
-            jwtplugin.HookIDJWTRespondJSON.String(),
-        },
-    },
-    // Dashboard: OAuth callback returns JWT
-    {
-        Method: "GET",
-        Path:   "/auth/oauth2/callback/google",
-        Plugins: []string{
-            jwtplugin.HookIDJWTRespondJSON.String(),
-        },
-    },
-    // Dashboard: protected route with RBAC
-    {
-        Method: "GET",
-        Path:   "/admin/elections",
-        Plugins: []string{
-            bearerplugin.HookIDBearerAuth.String(),
-            accesscontrolplugin.HookIDAccessControlEnforce.String(),
-        },
-        Permissions: []string{"elections.read"},
-    },
-    // Add StellarVote's own public routes (no auth)
-    {
-        Method: "GET",
-        Path:   "/health",
-        Disabled: true,                        // excluded from Authula's router
-    },
+    // Authula handlers — session set automatically by the Session plugin on sign-in
+    // (No custom hooks needed for sign-in/out — Authula's router handles them)
 })
+```
+
+StellarVote's middleware for dashboard routes:
+
+```go
+// Pseudocode — reads session cookie, validates via Authula's session service
+func (s *Server) sessionMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        cookie, err := r.Cookie("authula.session_token")
+        if err != nil {
+            http.Error(w, "unauthorized", http.StatusUnauthorized)
+            return
+        }
+        session, err := s.auth.SessionService.ValidateSession(r.Context(), cookie.Value)
+        if err != nil {
+            http.Error(w, "unauthorized", http.StatusUnauthorized)
+            return
+        }
+        // Attach user/org context to request
+        ctx := context.WithValue(r.Context(), "user_id", session.UserID)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
 ```
 
 ---
@@ -419,8 +411,7 @@ Order of initialization when integrating into StellarVote's `cmd/api/main.go`:
 2. Init database connection (Authula handles its own migrations)
 3. Init plugins in dependency order:
    - Email → (no deps)
-   - JWT → (no deps)
-   - Bearer → depends on JWT
+   - Session → (no deps)
    - Email & Password → depends on Email
    - OAuth2 → (no deps)
    - Access Control → (no deps)
@@ -435,5 +426,5 @@ Order of initialization when integrating into StellarVote's `cmd/api/main.go`:
 /auth          → Authula handler (Chi router internally)
 /              → StellarVote HelloWorld
 /health        → StellarVote health check
-/elections     → StellarVote domain routes (protected by API key middleware or JWT)
+/elections     → StellarVote domain routes (protected by session middleware or API key middleware)
 ```

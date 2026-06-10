@@ -18,17 +18,17 @@ All user identity flows are delegated to [Authula](https://authula.vercel.app/do
 | GitHub OAuth | `GET /auth/oauth2/authorize/github` | Same pattern as Google |
 | Stellar wallet | **Post-MVP** | Custom Authula plugin TBD |
 
-### Token Flow (JWT Plugin)
+### Session Cookie Flow
 
 ```
-User → Authula sign-in → Authula returns { access_token (15m), refresh_token (7d) }
+User → Authula sign-in → Authula sets session cookie (authula.session_token)
                               │
-                              ├── Frontend stores tokens
-                              ├── API calls use Authorization: Bearer <access_token>
-                              └── Token refresh: POST /auth/token/refresh
+                              ├── Browser sends cookie automatically with each request
+                              ├── Session extended automatically (update_age = "5m")
+                              └── Logout: POST /auth/sign-out clears cookie
 ```
 
-Authula uses **EdDSA JWKS** for signing. Public keys available at `/.well-known/jwks.json` for third-party verification. The default session-cookie plugin is replaced by the JWT + Bearer plugin pair for stateless operation.
+Authula's default **Session plugin** is used. The cookie is `http_only` (not readable by JS), `secure` (in production), and `same_site = "lax"`. No access/refresh tokens — the session cookie is the sole auth mechanism for the dashboard.
 
 ---
 
@@ -74,7 +74,7 @@ sequenceDiagram
 
 | Client | Auth Method | Validation | Tenant Resolution |
 |---|---|---|---|
-| Dashboard (web UI) | JWT (`Authorization: Bearer`) | Authula Bearer plugin verifies JWT + access-control plugin enforces RBAC | Org context from JWT claims (user's active org membership) |
+| Dashboard (web UI) | Session cookie (`authula.session_token`) | StellarVote middleware reads cookie, validates via Authula's session service | Org context from session's user → active org membership |
 | SDK / automation | API Key (`X-API-Key`) | StellarVote middleware: prefix lookup → constant-time hash compare | Org context from `api_keys.org_id` |
 
 ---

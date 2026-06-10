@@ -53,7 +53,7 @@ The repo is an **early scaffold** (hello world + health endpoint + DB health che
 
 ### Auth Architecture (planned, not yet coded)
 
-- **User auth**: Authula library mode (`github.com/Authula/authula`) — email/password + OTP, Google OAuth, GitHub OAuth. JWT + Bearer plugins replace default session cookies.
+- **User auth**: Authula library mode (`github.com/Authula/authula`) — email/password + OTP, Google OAuth, GitHub OAuth. Default Session plugin (cookie-based).
 - **App-level auth**: StellarVote-owned `api_keys` table + middleware (prefix lookup + constant-time hash compare). CRUD APIs not yet built.
 - **Stellar wallet auth**: Post-MVP, via custom Authula plugin.
 - **RBAC**: Authula access-control plugin (roles → permissions → user assignment within orgs).
