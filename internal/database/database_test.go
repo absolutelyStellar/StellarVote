@@ -1,7 +1,10 @@
+//go:build integration
+
 package database
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"testing"
 	"time"
@@ -27,10 +30,11 @@ func mustStartPostgresContainer() (func(context.Context, ...testcontainers.Termi
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).
-				WithStartupTimeout(5*time.Second)),
+				WithStartupTimeout(5*time.Second),
+		),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("postgres run: %w", err)
 	}
 
 	database = dbName
@@ -39,30 +43,33 @@ func mustStartPostgresContainer() (func(context.Context, ...testcontainers.Termi
 
 	dbHost, err := dbContainer.Host(context.Background())
 	if err != nil {
-		return dbContainer.Terminate, err
+		return dbContainer.Terminate, fmt.Errorf("container host: %w", err)
 	}
 
 	dbPort, err := dbContainer.MappedPort(context.Background(), "5432/tcp")
 	if err != nil {
-		return dbContainer.Terminate, err
+		return dbContainer.Terminate, fmt.Errorf("container port: %w", err)
 	}
 
 	host = dbHost
 	port = dbPort.Port()
 
-	return dbContainer.Terminate, err
+	return dbContainer.Terminate, nil
 }
 
 func TestMain(m *testing.M) {
 	teardown, err := mustStartPostgresContainer()
 	if err != nil {
-		log.Fatalf("could not start postgres container: %v", err)
+		log.Print("could not start postgres container: ", err)
+		return
 	}
 
 	m.Run()
 
-	if teardown != nil && teardown(context.Background()) != nil {
-		log.Fatalf("could not teardown postgres container: %v", err)
+	if teardown != nil {
+		if err := teardown(context.Background()); err != nil {
+			log.Print("could not teardown postgres container: ", err)
+		}
 	}
 }
 
@@ -83,7 +90,7 @@ func TestHealth(t *testing.T) {
 	}
 
 	if _, ok := stats["error"]; ok {
-		t.Fatalf("expected error not to be present")
+		t.Fatal("expected error not to be present")
 	}
 
 	if stats["message"] != "It's healthy" {
@@ -95,6 +102,6 @@ func TestClose(t *testing.T) {
 	srv := New()
 
 	if srv.Close() != nil {
-		t.Fatalf("expected Close() to return nil")
+		t.Fatal("expected Close() to return nil")
 	}
 }
