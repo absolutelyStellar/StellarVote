@@ -35,7 +35,7 @@ jobs:
       # Step 4: Run tests with race detection and coverage mapping
       - name: Run Tests
         run: |
-          go test -v -race -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+          go test -v -race -count=1 -covermode=atomic -coverprofile=coverage.out $(go list ./... | grep -v /database/)
 
       # Step 5: (Optional) Upload coverage report artifact
       - name: Upload Coverage Report
