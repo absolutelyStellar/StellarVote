@@ -10,6 +10,29 @@ services:
       - "${DB_PORT}:5432"
     volumes:
       - psql_volume_bp:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT}:8080"
+    environment:
+      DB_HOST: psql_bp
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SCHEMA: ${DB_SCHEMA}
+      PORT: ${PORT}
+      APP_ENV: ${APP_ENV}
+    depends_on:
+      psql_bp:
+        condition: service_healthy
 
 volumes:
   psql_volume_bp:
