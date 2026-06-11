@@ -20,10 +20,10 @@ docker-run:
 docker-down:
 	@docker compose down
 
-# Test the application
+# Test the application (skip database integration tests by default)
 test:
 	@echo "Testing..."
-	@go test ./... -v
+	@go test $(shell go list ./... | grep -v /database/) -v
 # Integrations Tests for the application
 itest:
 	@echo "Running integration tests..."
@@ -33,6 +33,24 @@ itest:
 clean:
 	@echo "Cleaning..."
 	@rm -f main
+
+# Lint (matches CI: golangci-lint v2)
+lint:
+	@which golangci-lint > /dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+	@golangci-lint run ./...
+
+# Security vulnerability check
+vulncheck:
+	@go install golang.org/x/vuln/cmd/govulncheck@latest
+	@govulncheck ./...
+
+# Static security analysis
+gosec:
+	@go install github.com/securego/gosec/v2/cmd/gosec@latest
+	@gosec -confidence medium ./...
+
+# Full CI check
+ci-check: lint test vulncheck gosec
 
 # Live Reload
 watch:
@@ -46,4 +64,4 @@ watch:
 		Write-Output 'Watching...'; \
 	}"
 
-.PHONY: all build run test clean watch docker-run docker-down itest
+.PHONY: all build run test clean lint vulncheck gosec ci-check watch docker-run docker-down itest
