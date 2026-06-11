@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"strconv"
 	"time"
@@ -28,6 +29,11 @@ type service struct {
 	db *sql.DB
 }
 
+const (
+	maxOpenConns = 40
+	maxWaitCount = 1000
+)
+
 var (
 	database   = os.Getenv("BLUEPRINT_DB_DATABASE")
 	password   = os.Getenv("BLUEPRINT_DB_PASSWORD")
@@ -43,10 +49,12 @@ func New() Service {
 	if dbInstance != nil {
 		return dbInstance
 	}
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s", username, password, host, port, database, schema)
+	hostPort := net.JoinHostPort(host, port)
+	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable&search_path=%s", username, password, hostPort, database, schema)
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("failed to open database connection: %v", err)
+		return nil
 	}
 	dbInstance = &service{
 		db: db,
@@ -67,7 +75,6 @@ func (s *service) Health() map[string]string {
 	if err != nil {
 		stats["status"] = "down"
 		stats["error"] = fmt.Sprintf("db down: %v", err)
-		log.Fatalf("db down: %v", err) // Log the error and terminate the program
 		return stats
 	}
 
@@ -86,11 +93,11 @@ func (s *service) Health() map[string]string {
 	stats["max_lifetime_closed"] = strconv.FormatInt(dbStats.MaxLifetimeClosed, 10)
 
 	// Evaluate stats to provide a health message
-	if dbStats.OpenConnections > 40 { // Assuming 50 is the max for this example
+	if dbStats.OpenConnections > maxOpenConns {
 		stats["message"] = "The database is experiencing heavy load."
 	}
 
-	if dbStats.WaitCount > 1000 {
+	if dbStats.WaitCount > maxWaitCount {
 		stats["message"] = "The database has a high number of wait events, indicating potential bottlenecks."
 	}
 
@@ -111,5 +118,5 @@ func (s *service) Health() map[string]string {
 // If an error occurs while closing the connection, it returns the error.
 func (s *service) Close() error {
 	log.Printf("Disconnected from database: %s", database)
-	return s.db.Close()
+	return fmt.Errorf("database close: %w", s.db.Close())
 }

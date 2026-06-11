@@ -15,23 +15,6 @@ jobs:
     name: Run Integration Tests
     runs-on: ubuntu-latest
 
-    # Spin up required infrastructure using Docker service containers
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: stellarvote
-        ports:
-          - 5432:5432
-        # Wait for postgres to be healthy before starting the job steps
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -46,12 +29,4 @@ jobs:
         run: go mod download
 
       - name: Run Integration Tests
-        # Pass database connection details via environment variables
-        env:
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_USER: postgres
-          DB_PASSWORD: postgres
-          DB_NAME: stellarvote
-        # Runs only tests matching build tags or naming conventions
-        run: go test -v -tags=integration ./integration/...
+        run: go test -tags=integration -v ./internal/database/...

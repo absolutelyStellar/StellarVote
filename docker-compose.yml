@@ -1,5 +1,5 @@
 services:
-  psql_bp:
+  stellarvote_db:
     image: postgres:latest
     restart: unless-stopped
     environment:
@@ -10,6 +10,37 @@ services:
       - "${DB_PORT}:5432"
     volumes:
       - psql_volume_bp:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - stellarvote
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT}:8080"
+    environment:
+      DB_HOST: stellarvote_db
+      DB_PORT: "5432"
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SCHEMA: ${DB_SCHEMA}
+      PORT: ${PORT}
+      APP_ENV: ${APP_ENV}
+    depends_on:
+      stellarvote_db:
+        condition: service_healthy
+    networks:
+      - stellarvote
 
 volumes:
   psql_volume_bp:
+
+networks:
+  stellarvote:
+    driver: bridge
