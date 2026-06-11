@@ -1,7 +1,7 @@
 Below are the **authentication + authorization flows** for StellarVote, covering:
 
 * User-level auth (handled by **Authula**)
-* API Key auth (app-level identity — StellarVote domain)
+* API Key auth (app-level identity - StellarVote domain)
 
 ---
 
@@ -18,7 +18,7 @@ All user identity flows are delegated to [Authula](https://authula.vercel.app/do
 | GitHub OAuth | `GET /auth/oauth2/authorize/github` | Same pattern as Google |
 | Stellar wallet | **Post-MVP** | Custom Authula plugin TBD |
 
-### Session Cookie Flow
+### Session Flow
 
 ```
 User → Authula sign-in → Authula sets session cookie (authula.session_token)
@@ -28,11 +28,13 @@ User → Authula sign-in → Authula sets session cookie (authula.session_token)
                               └── Logout: POST /auth/sign-out clears cookie
 ```
 
-Authula's default **Session plugin** is used. The cookie is `http_only` (not readable by JS), `secure` (in production), and `same_site = "lax"`. No access/refresh tokens — the session cookie is the sole auth mechanism for the dashboard.
+Authula's default **Session plugin** is used. The cookie is `http_only` (not readable by JS), `secure` (in production), and `same_site = "lax"`. No access/refresh tokens - the session cookie is the sole auth mechanism for the dashboard.
+
+Alternatively, the **JWT plugin** can replace session cookies with JWKS-based access + refresh tokens if stateless auth is preferred.
 
 ---
 
-# 2. API Key Flow (App Identity — SDK / Server Access)
+# 2. API Key Flow (Machine / SDK Access)
 
 Machine-to-machine authentication for the StellarVote SDK and server integrations.
 
@@ -55,27 +57,27 @@ sequenceDiagram
     SDK->>API: Request (API Key in X-API-Key header)
     API->>API: Extract key_prefix (first 8 chars)
     API->>DB: SELECT FROM api_keys WHERE key_prefix = ?
-    DB-->>API: key_hash + org_id + metadata
+    DB-->>API: key_hash + owner_id + metadata
     API->>API: Constant-time compare key_hash vs incoming key
-    API->>API: Attach org context (tenant)
+    API->>API: Attach owner context (user_id)
     API-->>SDK: Authorized response
 ```
 
 ### Key Points
 
-* API key maps → `api_keys.org_id` → Authula organization (tenant)
+* API key maps to `api_keys.owner_id` (FK to `authula_users.id`)
 * Keys are stored as **argon2-hashed**; only the prefix is stored in plaintext for lookup
-* No human identity involved — this is app-level auth
+* No human identity involved - this is machine-level auth
 * API key management endpoints are owned by StellarVote (create, list, revoke)
 
 ---
 
 # 3. Auth Decision by Client
 
-| Client | Auth Method | Validation | Tenant Resolution |
-|---|---|---|---|
-| Dashboard (web UI) | Session cookie (`authula.session_token`) | StellarVote middleware reads cookie, validates via Authula's session service | Org context from session's user → active org membership |
-| SDK / automation | API Key (`X-API-Key`) | StellarVote middleware: prefix lookup → constant-time hash compare | Org context from `api_keys.org_id` |
+| Client | Auth Method | Validation |
+|---|---|---|
+| Dashboard (web UI) | Session cookie (`authula.session_token`) | StellarVote middleware reads cookie, validates via Authula's session service, attaches `user_id` |
+| SDK / automation | API Key (`X-API-Key`) | StellarVote middleware: prefix lookup → constant-time hash compare, attaches `owner_id` |
 
 ---
 
@@ -86,13 +88,9 @@ USER LEVEL (Authula)
     └── identifies a human (email, OAuth, or wallet)
     └── Authula tables: users, accounts
 
-ORGANIZATION LEVEL (Authula)
-    └── identifies a tenant / StellarVote app
-    └── Authula tables: organizations, organization_members
-
 API KEY LEVEL (StellarVote)
-    └── identifies a machine / SDK client within a tenant
-    └── StellarVote table: api_keys
+    └── identifies a machine / SDK client
+    └── StellarVote table: api_keys (FK owner_id → authula_users)
 
 VOTER LEVEL (Blockchain)
     └── participates in elections (on-chain identity)
@@ -106,9 +104,7 @@ VOTER LEVEL (Blockchain)
 | Layer | Identity Type | Storage | Managed By |
 |---|---|---|---|
 | User | Email / OAuth / Wallet | Authula tables | Authula |
-| Organization | Organization membership | Authula tables | Authula |
-| Roles & Permissions | RBAC assignments | Authula tables | Authula |
-| API Key | Machine / SDK tenant | `api_keys` table | StellarVote |
+| API Key | Machine / SDK client | `api_keys` table | StellarVote |
 | Voter | Wallet | Blockchain | Stellar (Soroban) |
 
 ---

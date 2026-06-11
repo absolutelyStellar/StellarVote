@@ -249,7 +249,7 @@ Key state:
 **elections**
 
 * id
-* app_id
+* owner_id (FK to authula_users.id, nullable for wallet-based creation)
 * title
 * description
 * start_time
@@ -272,11 +272,13 @@ Key state:
 * tx_hash
 * created_at
 
-**apps**
+**api_keys**
 
 * id
+* owner_id (FK to authula_users.id)
 * name
-* api_key
+* key_prefix
+* key_hash
 
 ---
 

@@ -38,7 +38,7 @@ Below is the **system architecture diagram for StellarVote**, designed for a Dri
         │ - elections              │   │ - ElectionContract         │
         │ - candidates             │   │ - Vote recording           │
         │ - votes (indexed copy)   │   │ - Double-vote prevention   │
-        │ - apps / tenants         │   │ - Eligibility enforcement   │
+        │ - elections              │   │ - Eligibility enforcement   │
         │ - analytics cache        │   └────────────┬──────────────┘
         └────────────┬─────────────┘                │
                      │                              │
@@ -187,7 +187,7 @@ Bridges blockchain ↔ database:
 * Real blockchain integration (Soroban is meaningful, not cosmetic)
 * SDK-first design (developer tooling angle is strong)
 * Scalable indexing system (real infra engineering)
-* Multi-tenant SaaS architecture (platform-level thinking)
+* Flat ownership model (no org overhead, wallet-first)
 
 ---
 

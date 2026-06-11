@@ -3,7 +3,7 @@ erDiagram
     %% =====================
     %% AUTHULA-MANAGED (reference only)
     %% Schema owned by Authula library.
-    %% StellarVote REFERENCES these tables via user_id / org_id FKs.
+    %% StellarVote REFERENCES authula_users for resource ownership.
     %% =====================
 
     AUTHULA_USERS {
@@ -23,46 +23,13 @@ erDiagram
         timestamptz created_at
     }
 
-    AUTHULA_ORGANIZATIONS {
-        string id PK
-        string owner_id FK
-        string name
-        string slug
-        string logo
-        jsonb metadata
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    AUTHULA_ORGANIZATION_MEMBERS {
-        string id PK
-        string organization_id FK
-        string user_id FK
-        string role
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    AUTHULA_ACCESS_CONTROL_ROLES {
-        string id PK
-        string name
-        int weight
-        boolean is_system
-        timestamptz created_at
-    }
-
-    AUTHULA_ACCESS_CONTROL_USER_ROLES {
-        string user_id PK
-        string role_id PK
-    }
-
     %% =====================
     %% STELLARVOTE DOMAIN
     %% =====================
 
     API_KEYS {
         uuid id PK
-        uuid org_id FK
+        uuid owner_id FK
         text name
         text key_prefix
         text key_hash
@@ -73,7 +40,7 @@ erDiagram
 
     ELECTIONS {
         uuid id PK
-        uuid org_id FK
+        uuid owner_id FK
         text title
         text description
         voting_type voting_type
@@ -149,12 +116,10 @@ erDiagram
 
     %% Authula-owned
     AUTHULA_USERS ||--o{ AUTHULA_ACCOUNTS : linked
-    AUTHULA_USERS ||--o{ AUTHULA_ORGANIZATION_MEMBERS : member_of
-    AUTHULA_ORGANIZATIONS ||--o{ AUTHULA_ORGANIZATION_MEMBERS : has
 
     %% StellarVote-owned
-    AUTHULA_ORGANIZATIONS ||--o{ API_KEYS : issued_for
-    AUTHULA_ORGANIZATIONS ||--o{ ELECTIONS : owns
+    AUTHULA_USERS ||--o{ API_KEYS : has
+    AUTHULA_USERS ||--o{ ELECTIONS : creates
 
     ELECTIONS ||--o{ CANDIDATES : contains
     ELECTIONS ||--o{ VOTES : receives

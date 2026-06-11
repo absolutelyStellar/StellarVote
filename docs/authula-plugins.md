@@ -153,106 +153,25 @@ None — links to Authula's core `accounts` table.
 
 ---
 
-## 5. Organizations Plugin — Multi-Tenancy
+## 5. Organizations Plugin (Optional — Not Used in MVP)
 
-Each StellarVote app/tenant = one Authula organization. Users sign up, create or join orgs, and perform operations within their org scope.
+The Organizations plugin is **not required** for StellarVote's flat ownership model. Elections and API keys are owned directly by a user (via `authula_users.id`), not scoped to an organization.
 
-```go
-organizationsplugin.New(organizationsplugintypes.OrganizationsPluginConfig{
-    Enabled:                          true,
-    OrganizationsLimit:               new(10),       // 0 = unlimited
-    MembersLimit:                     new(100),
-    InvitationsLimit:                 new(100),
-    InvitationExpiresIn:              7 * 24 * time.Hour,
-    RequireEmailVerifiedOnInvitation: true,
-    DatabaseHooks: &organizationsplugintypes.OrganizationsDatabaseHooksConfig{
-        // Optional: hook into org create/update/delete lifecycle
-    },
-})
-```
-
-### Endpoints
-
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/auth/organizations` | Create org |
-| `GET` | `/auth/organizations` | List user's orgs |
-| `PATCH` | `/auth/organizations/{id}` | Update org metadata |
-| `DELETE` | `/auth/organizations/{id}` | Delete org |
-| `POST` | `/auth/organizations/{id}/invitations` | Invite user by email |
-| `POST` | `/auth/organizations/{id}/invitations/{inv_id}/accept` | Accept invitation |
-| `POST` | `/auth/organizations/{id}/invitations/{inv_id}/reject` | Reject invitation |
-| `GET` | `/auth/organizations/{id}/members` | List members |
-| `PATCH` | `/auth/organizations/{id}/members/{member_id}` | Update member role |
-| `DELETE` | `/auth/organizations/{id}/members/{member_id}` | Remove member |
-| `POST` | `/auth/organizations/{id}/teams` | Create team |
-| `GET` | `/auth/organizations/{id}/teams/{team_id}/members` | List team members |
-
-### Tables created
-
-- `organizations` — org records, `owner_id` → users
-- `organization_invitations` — pending invitations
-- `organization_members` — user → org membership with role
-- `organization_teams` — team grouping within orgs
-- `organization_team_members` — member → team assignments
-
-### Notes
-
-- **Depends on the Access Control plugin** — org member roles are enforced via RBAC.
-- StellarVote's domain tables (`elections`, `api_keys`, etc.) FK to `organizations.id`.
-- The `slug` field is the URL-friendly org identifier (e.g., `my-awesome-app`).
+This plugin may be added in a future phase if multi-user election management (teams, shared workspaces) is needed. For MVP, the simpler model applies: one user creates and controls their elections.
 
 ---
 
-## 6. Access Control Plugin — RBAC
+## 6. Access Control Plugin (Optional — Not Used in MVP)
 
-Manages roles, permissions, and user-role assignments within orgs.
+The Access Control plugin is **not required** for StellarVote's flat ownership model. Authorization is simple: the resource owner has full control. No roles, permissions, or RBAC are needed at this stage.
 
-```go
-accesscontrolplugin.New(accesscontrolplugintypes.AccessControlPluginConfig{
-    Enabled: true,
-})
-```
-
-### Endpoints
-
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/auth/access-control/roles` | Create role (`name`, `weight`, `is_system`) |
-| `GET` | `/auth/access-control/roles` | List roles |
-| `POST` | `/auth/access-control/permissions` | Create permission (`key`, `description`) |
-| `POST` | `/auth/access-control/roles/{id}/permissions` | Assign permission to role |
-| `POST` | `/auth/access-control/users/{id}/roles` | Assign role to user |
-| `GET` | `/auth/access-control/users/{id}/permissions` | Get effective permissions for user |
-| `POST` | `/auth/access-control/users/{id}/permissions/check` | Check if user has specific permission |
-
-### Tables created
-
-- `access_control_roles` — role definitions (`name`, `weight` for hierarchy)
-- `access_control_permissions` — permission keys
-- `access_control_role_permissions` — many-to-many role ↔ permission
-- `access_control_user_roles` — many-to-many user ↔ role (with `expires_at`)
-
-### Hook usage
-
-- `access_control.enforce` — attach to protected routes with required `permissions`
-
-```
-Example route mapping:
-  path = "/admin/elections"
-  plugins = ["bearer.auth", "access_control.enforce"]
-  permissions = ["elections.create"]
-```
-
-### Notes
-
-- Role **weight** establishes hierarchy — a user can only assign roles with equal or lower weight than their highest role (prevents privilege escalation).
-- `is_system` roles/permissions are protected from modification.
-- In route mappings, `bearer.auth` must appear **before** `access_control.enforce` in the plugin chain.
+This plugin may be added later if the Organizations plugin is introduced and multi-user election management requires permission scoping.
 
 ---
 
-## 7. Admin Plugin — User & Session Management
+## 7. Admin Plugin (Optional)
+
+Provides user management, session management, and impersonation endpoints. Not needed for MVP but useful if the platform grows to support multiple users.
 
 ```go
 adminplugin.New(adminplugintypes.AdminPluginConfig{
@@ -275,11 +194,6 @@ adminplugin.New(adminplugintypes.AdminPluginConfig{
 - `admin_impersonations` — audit trail for impersonation events
 - `admin_user_states` — ban state per user
 - `admin_session_states` — revocation/impersonation state per session
-
-### Notes
-
-- All admin endpoints should be protected by `bearer.auth` + `access_control.enforce` with a high-weight role.
-- StellarVote's admin dashboard will call these endpoints for user management features.
 
 ---
 
@@ -394,7 +308,7 @@ func (s *Server) sessionMiddleware(next http.Handler) http.Handler {
             http.Error(w, "unauthorized", http.StatusUnauthorized)
             return
         }
-        // Attach user/org context to request
+        // Attach user context to request
         ctx := context.WithValue(r.Context(), "user_id", session.UserID)
         next.ServeHTTP(w, r.WithContext(ctx))
     })
@@ -410,14 +324,15 @@ Order of initialization when integrating into StellarVote's `cmd/api/main.go`:
 1. Load `config.toml` + `.env`
 2. Init database connection (Authula handles its own migrations)
 3. Init plugins in dependency order:
+   - Rate Limit → (no deps)
    - Email → (no deps)
    - Session → (no deps)
    - Email & Password → depends on Email
    - OAuth2 → (no deps)
-   - Access Control → (no deps)
-   - Organizations → depends on Access Control
-   - Admin → (no deps)
-   - Rate Limit → (no deps)
+   - JWT (optional, replaces Session) → depends on Session or standalone
+   - Admin (optional) → (no deps)
+   - Organizations (optional, future) → depends on Access Control
+   - Access Control (optional, future) → (no deps)
 4. Create Authula instance with all plugins
 5. Mount `auth.Handler()` at `/auth` on the `httprouter` server
 6. StellarVote's own routes live alongside, untouched
